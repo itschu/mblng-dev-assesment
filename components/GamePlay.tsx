@@ -41,7 +41,7 @@ export default function GamePlay() {
 	}, []);
 
 	const setupRealtimeSubscriptions = () => {
-		const channelName = `gameplay-session-updates-${Date.now()}`;
+		const channelName = `game-play-updates`;
 
 		const gameChannel = supabase
 			.channel(channelName)
@@ -81,7 +81,11 @@ export default function GamePlay() {
 	const handleSessionChange = (payload: any) => {
 		const { eventType, new: newRecord, old: oldRecord } = payload;
 
-		console.log('GamePlay: Processing session change:', { eventType, newRecord, oldRecord });
+		console.log('GamePlay: Processing session change:', {
+			eventType,
+			newRecord,
+			oldRecord,
+		});
 
 		if (eventType === 'UPDATE') {
 			if (newRecord.status === 'finished' && oldRecord?.status === 'active') {
@@ -101,40 +105,45 @@ export default function GamePlay() {
 	const fetchMySession = async () => {
 		try {
 			console.log('GamePlay: Fetching my session...');
-
 			const data = await GameAPI.getMySession();
 
 			console.log('GamePlay: Session data received:', data);
-
 			setMySession(data);
+
+			if (data.participant?.chosen_number) {
+				console.log('GamePlay: Setting selected number from database:', data.participant.chosen_number);
+				setSelectedNumber(data.participant.chosen_number);
+			} else {
+				console.log('GamePlay: No chosen number in database, clearing selection');
+				setSelectedNumber(null);
+			}
 
 			if (data.session && data.session.status === 'active') {
 				const startTime = new Date(data.session.started_at).getTime();
-				const currentTime = new Date().getTime();
-				const elapsed = Math.floor((currentTime - startTime) / 1000);
+				const now = Date.now();
+				const elapsed = Math.floor((now - startTime) / 1000);
 				const remaining = Math.max(0, (data.session.session_duration || 60) - elapsed);
 				setTimeRemaining(remaining);
-				console.log('GamePlay: Time remaining calculated:', remaining);
 			} else {
 				setTimeRemaining(0);
 			}
 
-			if (data.session && data.session.status === 'finished' && data.winningNumber !== undefined) {
-				console.log('GamePlay: Setting game results');
+			if (data.session && data.session.status === 'finished' && data.winningNumber !== undefined && data.showResults) {
+				console.log('GamePlay: Setting game results:', {
+					winningNumber: data.winningNumber,
+					isWinner: data.isWinner,
+					winners: data.winners,
+				});
 				setGameResult(data);
 			} else {
 				setGameResult(null);
 			}
 
-			if (data.participant && data.participant.chosen_number) {
-				setSelectedNumber(data.participant.chosen_number);
-			}
-
 			setError('');
-		} catch (error: any) {
-			console.error('GamePlay: Fetch my session error:', error);
-			setError(error.message);
-			if (error.message.includes('token') || error.message.includes('auth')) {
+		} catch (err: any) {
+			console.error('GamePlay: Fetch my session error:', err);
+			setError(err.message);
+			if (err.message.includes('token') || err.message.includes('auth')) {
 				await logoutUser();
 				router.push('/');
 			}
@@ -158,9 +167,9 @@ export default function GamePlay() {
 			setTimeout(() => setSuccessMessage(''), 3000);
 
 			await fetchMySession();
-		} catch (error: any) {
-			console.error('GamePlay: Select number error:', error);
-			setError(error.message);
+		} catch (err: any) {
+			console.error('GamePlay: Select number error:', err);
+			setError(err.message);
 		} finally {
 			setIsLoading(false);
 		}
@@ -177,8 +186,8 @@ export default function GamePlay() {
 				channelRef.current = null;
 			}
 			router.push('/home');
-		} catch (error: any) {
-			setError(error.message);
+		} catch (err: any) {
+			setError(err.message);
 		} finally {
 			setIsLoading(false);
 		}
@@ -197,29 +206,25 @@ export default function GamePlay() {
 	};
 
 	useEffect(() => {
-		let timeInterval: NodeJS.Timeout | null = null;
+		let timer: NodeJS.Timeout | null = null;
 
 		if (mySession?.session?.status === 'active' && timeRemaining > 0) {
-			timeInterval = setInterval(() => {
+			timer = setInterval(() => {
 				setTimeRemaining((prev) => {
-					const newTime = Math.max(0, prev - 1);
-
-					if (newTime === 0 && prev > 0) {
+					const next = Math.max(0, prev - 1);
+					if (next === 0 && prev > 0) {
 						console.log('GamePlay: Time expired, fetching results');
 						setTimeout(() => {
 							fetchMySession();
 						}, 1000);
 					}
-
-					return newTime;
+					return next;
 				});
 			}, 1000);
 		}
 
 		return () => {
-			if (timeInterval) {
-				clearInterval(timeInterval);
-			}
+			if (timer) clearInterval(timer);
 		};
 	}, [mySession?.session?.status, mySession?.session?.id]);
 
@@ -300,7 +305,7 @@ export default function GamePlay() {
 
 						<div className="bg-blue-50 rounded-xl p-6 mb-6">
 							<h3 className="text-lg font-semibold text-blue-900 mb-2">Ready to Play?</h3>
-							<p className="text-blue-700 text-sm">Head back to the lobby to join or start a new 60-second number guessing session!</p>
+							<p className="text-blue-700 text-sm">Head back to the lobby to join or start a new 60‑second number guessing session!</p>
 						</div>
 
 						<button onClick={backToLobby} className="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 px-6 rounded-lg transition-colors whitespace-nowrap cursor-pointer">

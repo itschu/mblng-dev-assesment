@@ -34,6 +34,7 @@ export default function GameLobby() {
 	const [playersList, setPlayersList] = useState<any[]>([]);
 	const [resultsClosed, setResultsClosed] = useState(false);
 	const [isInitialLoading, setIsInitialLoading] = useState(true);
+	const [hasActiveSession, setHasActiveSession] = useState(false);
 	const router = useRouter();
 	const channelRef = useRef<any>(null);
 
@@ -59,7 +60,7 @@ export default function GameLobby() {
 	}, []);
 
 	const setupRealtimeSubscriptions = () => {
-		const channelName = `lobby-session-updates-${Date.now()}`;
+		const channelName = `lobby-updates`;
 
 		const lobbyChannel = supabase
 			.channel(channelName)
@@ -104,6 +105,7 @@ export default function GameLobby() {
 		if (eventType === 'INSERT' && newRecord.status === 'active') {
 			console.log('Lobby: New active session created');
 			setResultsClosed(false);
+			setShowResults(false);
 			setTimeout(() => {
 				fetchCurrentSession();
 			}, 500);
@@ -120,6 +122,12 @@ export default function GameLobby() {
 					fetchCurrentSession();
 				}, 300);
 			}
+		} else if (eventType === 'DELETE') {
+			console.log('Lobby: Session deleted, resetting to waiting state');
+			setSession(null);
+			setShowResults(false);
+			setWaitingForPlayers(true);
+			setHasActiveSession(false);
 		}
 	};
 
@@ -131,6 +139,8 @@ export default function GameLobby() {
 
 			console.log('Lobby: Session data received:', data);
 
+			setHasActiveSession(data.hasActiveSession || false);
+
 			if (data.showResults && !resultsClosed) {
 				console.log('Lobby: Displaying results');
 				setShowResults(true);
@@ -140,19 +150,6 @@ export default function GameLobby() {
 				setWaitingForPlayers(false);
 				setPlayersList([]);
 				setTimeRemaining(0);
-				setError('');
-				return;
-			}
-
-			if (data.waitingForPlayers) {
-				console.log('Lobby: Waiting for players');
-				setWaitingForPlayers(true);
-				setSession(null);
-				setShowResults(false);
-				setWinners([]);
-				setTotalPlayers(0);
-				setTimeRemaining(0);
-				setPlayersList([]);
 				setError('');
 				return;
 			}
@@ -186,9 +183,14 @@ export default function GameLobby() {
 			setError('');
 		} catch (error: any) {
 			console.error('Lobby: Fetch session error:', error);
-			if (!error.message.includes('Failed to fetch') && !error.message.includes('NetworkError')) {
+			if (!error.message.includes('Failed to fetch') && !error.message.includes('NetworkError') && !error.message.includes('Network error')) {
 				setError(error.message);
 			}
+			setWaitingForPlayers(true);
+			setHasActiveSession(false);
+			setSession(null);
+			setShowResults(false);
+
 			if (error.message.includes('token') || error.message.includes('auth')) {
 				await logoutUser();
 				router.push('/');
@@ -235,6 +237,7 @@ export default function GameLobby() {
 		setSession(null);
 		setTimeRemaining(0);
 		setPlayersList([]);
+		setHasActiveSession(false);
 	};
 
 	const logout = async () => {
@@ -401,23 +404,7 @@ export default function GameLobby() {
 						</div>
 					)}
 
-					{waitingForPlayers && (
-						<div className="text-center">
-							<div className="bg-blue-50 rounded-xl p-8 mb-6">
-								<h3 className="text-xl font-semibold text-blue-900 mb-4">Waiting for Players</h3>
-								<p className="text-blue-700 mb-4">No active session yet. Be the first to start a new 60-second game!</p>
-								<div className="animate-pulse">
-									<div className="w-16 h-16 bg-blue-200 rounded-full mx-auto mb-4"></div>
-								</div>
-							</div>
-
-							<button onClick={joinSession} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-4 px-8 rounded-lg text-lg transition-colors whitespace-nowrap cursor-pointer disabled:cursor-not-allowed">
-								{isLoading ? 'Starting Session...' : 'Start New Session'}
-							</button>
-						</div>
-					)}
-
-					{session && session.status === 'active' && !showResults && !waitingForPlayers && (
+					{hasActiveSession && session && session.status === 'active' && !showResults && !waitingForPlayers && (
 						<div className="space-y-6">
 							<div className="bg-yellow-50 border-2 border-yellow-200 rounded-xl p-6 text-center">
 								<h3 className="text-2xl font-bold text-yellow-800 mb-4">🎮 Active Session Found!</h3>
@@ -478,6 +465,22 @@ export default function GameLobby() {
 									{isLoading ? 'Joining...' : session.current_players >= session.max_players ? 'Session Full' : 'Join Session'}
 								</button>
 							</div>
+						</div>
+					)}
+
+					{waitingForPlayers && !hasActiveSession && !showResults && (
+						<div className="text-center">
+							<div className="bg-blue-50 rounded-xl p-8 mb-6">
+								<h3 className="text-xl font-semibold text-blue-900 mb-4">Waiting for Players</h3>
+								<p className="text-blue-700 mb-4">No active session yet. Be the first to start a new 60-second game!</p>
+								<div className="animate-pulse">
+									<div className="w-16 h-16 bg-blue-200 rounded-full mx-auto mb-4"></div>
+								</div>
+							</div>
+
+							<button onClick={joinSession} disabled={isLoading} className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-4 px-8 rounded-lg text-lg transition-colors whitespace-nowrap cursor-pointer disabled:cursor-not-allowed">
+								{isLoading ? 'Starting Session...' : 'Start New Session'}
+							</button>
 						</div>
 					)}
 

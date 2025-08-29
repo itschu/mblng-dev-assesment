@@ -30,11 +30,22 @@ export default function Leaderboard() {
 		setError('');
 
 		try {
+			console.log('Fetching leaderboard with filter:', filter);
+
 			const data = await GameAPI.getLeaderboard(filter);
+			console.log('Leaderboard API response:', data);
+
+			if (data.success === false) {
+				throw new Error(data.error || 'Failed to load leaderboard');
+			}
+
 			setLeaderboard(data.leaderboard || []);
+			console.log('Leaderboard data set:', data.leaderboard?.length || 0, 'players');
 		} catch (error: any) {
-			setError(error.message);
-			if (error.message.includes('token') || error.message.includes('auth')) {
+			console.error('Leaderboard fetch error:', error);
+			setError(error.message || 'Failed to load leaderboard');
+
+			if (error.message && (error.message.includes('token') || error.message.includes('auth'))) {
 				removeToken();
 				router.push('/');
 			}
@@ -106,7 +117,12 @@ export default function Leaderboard() {
 						</div>
 					</div>
 
-					{error && <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700">{error}</div>}
+					{error && (
+						<div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 text-red-700">
+							<p className="font-medium">Error loading leaderboard:</p>
+							<p className="text-sm mt-1">{error}</p>
+						</div>
+					)}
 
 					{isLoading ? (
 						<div className="text-center py-8">
@@ -151,12 +167,12 @@ export default function Leaderboard() {
 					)}
 
 					<div className="mt-8 bg-blue-50 rounded-xl p-6">
-						<h3 className="text-lg font-semibold text-blue-900 mb-3">Authentication Info</h3>
+						<h3 className="text-lg font-semibold text-blue-900 mb-3">Game Statistics</h3>
 						<div className="text-sm text-blue-800">
-							<p>• JWT-based authentication with username-only login</p>
-							<p>• Next.js API routes handle token validation</p>
-							<p>• Supabase Edge Functions manage game data</p>
-							<p>• Secure token storage in browser localStorage</p>
+							<p>• Real-time leaderboard updates after each game</p>
+							<p>• Time-based filtering: All-time, Daily, Weekly, Monthly</p>
+							<p>• Rankings based on total wins with username tiebreaker</p>
+							<p>• Statistics calculated from completed game sessions</p>
 						</div>
 					</div>
 				</div>
